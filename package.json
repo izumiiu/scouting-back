@@ -8,10 +8,12 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "dev": "nodemon dist/server.js",
+    "dev": "nodemon --watch src --ext ts --exec \"npm run build && node dist/server.js\"",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "create-officer": "node dist/scripts/create-officer.js",
+    "check-config": "node dist/scripts/check-config.js"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
