@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Analysis } from '../models/Analysis.js';
 import { ScoutingCase } from '../models/ScoutingCase.js';
 import { AuditEvent } from '../models/AuditEvent.js';
-import type { AiProvider } from './openai.service.js';
+import type { AiProvider } from './ai.contract.js';
 import { AppError } from '../utils/errors.js';
 export async function processNextAnalysis(
   provider: AiProvider,
@@ -50,6 +50,12 @@ export async function processNextAnalysis(
   );
   if (!run) return false;
   try {
+    if (run.provider !== provider.name)
+      throw new AppError(
+        409,
+        'AI_PROVIDER_CHANGED',
+        'ผู้ให้บริการ AI เปลี่ยนหลังเข้าคิว กรุณาสั่งวิเคราะห์ใหม่',
+      );
     const permission = await ScoutingCase.exists({
       _id: run.caseId,
       organizationId: run.organizationId,

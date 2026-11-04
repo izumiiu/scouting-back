@@ -89,7 +89,7 @@ export const caseController = (config: Config) => ({
       throw new AppError(
         503,
         'AI_NOT_CONFIGURED',
-        'ยังไม่ได้ตั้ง OpenAI API key/model ที่ backend กรุณาตั้งค่าก่อนวิเคราะห์',
+        'ยังไม่ได้ตั้ง API key/model ของบริการ AI ที่เลือก กรุณาตั้งค่าที่ backend ก่อนวิเคราะห์',
       );
     const v = object(req.body);
     res.status(202).json({
@@ -99,6 +99,7 @@ export const caseController = (config: Config) => ({
         keyOf(req.get('Idempotency-Key')),
         actorOf(req),
         config.aiModel,
+        config.aiProvider === 'groq' ? 'Groq' : 'OpenAI',
       ),
     });
   },

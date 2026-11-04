@@ -20,6 +20,7 @@ const config: Config = {
   origin: 'http://localhost:5173',
   production: false,
   trustProxyHops: 0,
+  aiProvider: 'openai',
   aiKey: 'test-only-not-a-real-key',
   aiModel: 'test-fixture-not-an-openai-call',
   frontendDist: 'missing-test-folder',
@@ -52,6 +53,7 @@ const input = {
   },
 };
 const fixtureProvider = {
+  name: 'OpenAI' as const,
   analyze: async () => ({
     result: {
       summary: 'ผลจำลองสำหรับ integration test เท่านั้น',
@@ -168,6 +170,8 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       .send({ revision: 1 })
       .expect(202);
     const run = await Analysis.findOne({ caseId });
+    expect(run?.provider).toBe('OpenAI');
+    expect(run?.model).toBe(config.aiModel);
     expect(JSON.stringify(run?.inputSnapshot)).not.toContain('0800000000');
     await agent
       .post(`/api/cases/${caseId}/analyses`)
@@ -265,6 +269,7 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       .send({ revision: 2 })
       .expect(202);
     await processNextAnalysis({
+      name: 'OpenAI',
       analyze: async () => {
         throw new Error('secret provider payload must not leak');
       },
@@ -350,6 +355,7 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       .expect(200);
     let calls = 0;
     await processNextAnalysis({
+      name: 'OpenAI',
       analyze: async () => {
         calls++;
         return fixtureProvider.analyze();
@@ -359,6 +365,89 @@ describe('authenticated case workflow with transactional MongoDB', () => {
     expect((await Analysis.findById(queued.body.analysis._id))?.status).toBe(
       'failed',
     );
+  });
+  it('persists Groq attribution through queue, worker, human review and case history', async () => {
+    const groqConfig: Config = {
+      ...config,
+      aiProvider: 'groq',
+      aiModel: 'groq-fixture-model',
+    };
+    const groqAgent = request.agent(createApp(groqConfig));
+    await groqAgent
+      .post('/api/auth/login')
+      .set(headers)
+      .send({ email: 'officer@example.test', password: 'Test-password-2026' })
+      .expect(200);
+    const catalog = await groqAgent.get('/api/catalog').expect(200);
+    expect(catalog.body.aiProvider).toBe('groq');
+    expect(JSON.stringify(catalog.body)).not.toContain(config.aiKey);
+    const created = await groqAgent
+      .post('/api/cases')
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...input, title: 'Groq fixture workflow' })
+      .expect(201);
+    const id = created.body.caseRecord._id;
+    const queued = await groqAgent
+      .post(`/api/cases/${id}/analyses`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ revision: 1 })
+      .expect(202);
+    expect(queued.body.analysis).toMatchObject({
+      provider: 'Groq',
+      model: 'groq-fixture-model',
+    });
+    await processNextAnalysis({ ...fixtureProvider, name: 'Groq' });
+    await groqAgent
+      .post(`/api/cases/${id}/reviews`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        revision: 1,
+        decisionVersion: 0,
+        analysisId: queued.body.analysis._id,
+        destination: null,
+        expertAreas: ['FINANCE'],
+        notes: 'ตรวจผล fixture ด้านการเงินแล้ว',
+      })
+      .expect(201);
+    const detail = await groqAgent.get(`/api/cases/${id}`).expect(200);
+    expect(detail.body.analyses[0]).toMatchObject({
+      provider: 'Groq',
+      model: 'groq-fixture-model',
+      status: 'succeeded',
+    });
+    expect(detail.body.reviews).toHaveLength(1);
+    expect(detail.body.events.length).toBeGreaterThanOrEqual(3);
+  });
+  it('fails a queued job safely if the running adapter changed providers', async () => {
+    const created = await agent
+      .post('/api/cases')
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...input, title: 'Provider switch fixture' })
+      .expect(201);
+    const id = created.body.caseRecord._id;
+    const queued = await agent
+      .post(`/api/cases/${id}/analyses`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ revision: 1 })
+      .expect(202);
+    let calls = 0;
+    await processNextAnalysis({
+      name: 'Groq',
+      analyze: async () => {
+        calls++;
+        return fixtureProvider.analyze();
+      },
+    });
+    expect(calls).toBe(0);
+    expect((await Analysis.findById(queued.body.analysis._id))?.status).toBe(
+      'failed',
+    );
+    expect((await ScoutingCase.findById(id))?.activeAnalysisId).toBeNull();
   });
   it('rejects oversized JSON before database mutation', async () => {
     await agent

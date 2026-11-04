@@ -177,6 +177,7 @@ export async function queueAnalysis(
   key: string,
   actor: Actor,
   model: string,
+  provider: 'OpenAI' | 'Groq',
 ) {
   await requireCase(id, actor);
   const prior = await Analysis.findOne({
@@ -233,7 +234,7 @@ export async function queueAnalysis(
           ruleVersion: RULE_VERSION,
           expertVersion: EXPERT_VERSION,
           promptVersion: PROMPT_VERSION,
-          provider: 'OpenAI',
+          provider,
           model,
           status: 'queued',
           requestedBy: actor.id,

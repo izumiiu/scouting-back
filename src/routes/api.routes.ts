@@ -28,6 +28,7 @@ export function apiRoutes(config: Config) {
       ruleVersion: RULE_VERSION,
       expertVersion: EXPERT_VERSION,
       rulesApproval: 'draft',
+      aiProvider: config.aiProvider,
       aiConfigured: Boolean(config.aiKey && config.aiModel),
     }),
   );

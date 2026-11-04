@@ -3,7 +3,7 @@ import { loadConfig } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import { createApp } from './app.js';
 import { startAnalysisWorker } from './services/analysis.worker.js';
-import { OpenAiProvider } from './services/openai.service.js';
+import { createAiProvider } from './services/ai-provider.factory.js';
 import { Staff } from './models/Staff.js';
 import { ScoutingCase } from './models/ScoutingCase.js';
 import { Analysis } from './models/Analysis.js';
@@ -22,7 +22,7 @@ try {
     RateBucket.init(),
   ]);
   const stop = config.workerEnabled
-    ? startAnalysisWorker(new OpenAiProvider(config))
+    ? startAnalysisWorker(createAiProvider(config))
     : async () => {};
   const server = createApp(config).listen(config.port, () =>
     console.info(`Scouting server listening on port ${config.port}`),

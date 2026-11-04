@@ -10,12 +10,15 @@ const config: Config = {
   origin: 'http://localhost',
   production: false,
   trustProxyHops: 0,
+  aiProvider: 'openai',
   aiKey: 'fixture-not-real',
   aiModel: 'fixture-only',
   frontendDist: '',
   workerEnabled: false,
 };
 const run = {
+  provider: 'OpenAI',
+  model: 'fixture-only',
   inputSnapshot: { B1: 'ต้องการตลาด' },
   eligibility: evaluate({}, '2026-11-03'),
   groupContext: { group: null, status: 'unknown', warnings: [] },

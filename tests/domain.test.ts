@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { evaluate, ageOn, validDate } from '../src/domain/eligibility.js';
 import { deriveGroup } from '../src/domain/grouping.js';
 import { parseCaseInput } from '../src/validators/case.validator.js';
-import { validateAiResult } from '../src/services/openai.service.js';
+import { validateAiResult } from '../src/services/ai-analysis.js';
 import type { Answers, CaseInput } from '../src/domain/types.js';
 const input: CaseInput = {
   title: 'ทดสอบ',

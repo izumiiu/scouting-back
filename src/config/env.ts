@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { resolve } from 'node:path';
+import type { AiProviderId } from '../services/ai.contract.js';
 export interface Config {
   port: number;
   mongoUri: string;
@@ -7,20 +8,26 @@ export interface Config {
   origin: string;
   production: boolean;
   trustProxyHops: number;
+  aiProvider: AiProviderId;
   aiKey: string;
   aiModel: string;
   frontendDist: string;
   workerEnabled: boolean;
 }
-export function loadConfig(): Config {
-  const production = process.env.NODE_ENV === 'production';
-  const jwtSecret = process.env.JWT_SECRET ?? '';
+export function loadConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): Config {
+  const aiProvider = environment.AI_PROVIDER?.trim() || 'openai';
+  if (aiProvider !== 'openai' && aiProvider !== 'groq')
+    throw new Error('AI_PROVIDER ต้องเป็น openai หรือ groq');
+  const production = environment.NODE_ENV === 'production';
+  const jwtSecret = environment.JWT_SECRET ?? '';
   if (jwtSecret.length < 32)
     throw new Error('ตั้ง JWT_SECRET อย่างน้อย 32 ตัวอักษรใน backend/.env');
-  const mongoUri = process.env.MONGODB_URI ?? '';
+  const mongoUri = environment.MONGODB_URI ?? '';
   if (!/^mongodb(\+srv)?:\/\//.test(mongoUri))
     throw new Error('ตั้ง MONGODB_URI ใน backend/.env');
-  const origin = process.env.APP_ORIGIN ?? 'http://localhost:5173';
+  const origin = environment.APP_ORIGIN ?? 'http://localhost:5173';
   if (
     !/^https?:\/\//.test(origin) ||
     (production && !origin.startsWith('https://'))
@@ -28,8 +35,8 @@ export function loadConfig(): Config {
     throw new Error(
       'APP_ORIGIN ต้องเป็น URL ของ frontend และใช้ HTTPS ใน production',
     );
-  const port = Number(process.env.PORT ?? 4000),
-    trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  const port = Number(environment.PORT ?? 4000),
+    trustProxyHops = Number(environment.TRUST_PROXY_HOPS ?? 0);
   if (
     !Number.isInteger(port) ||
     port < 1 ||
@@ -46,9 +53,18 @@ export function loadConfig(): Config {
     origin: new URL(origin).origin,
     production,
     trustProxyHops,
-    aiKey: process.env.OPENAI_API_KEY ?? '',
-    aiModel: process.env.OPENAI_MODEL ?? '',
-    frontendDist: resolve(process.env.FRONTEND_DIST_PATH ?? '../frontend/dist'),
-    workerEnabled: process.env.ENABLE_WORKER !== 'false',
+    aiProvider,
+    aiKey:
+      (aiProvider === 'groq'
+        ? environment.GROQ_API_KEY
+        : environment.OPENAI_API_KEY
+      )?.trim() ?? '',
+    aiModel:
+      (aiProvider === 'groq'
+        ? environment.GROQ_MODEL
+        : environment.OPENAI_MODEL
+      )?.trim() ?? '',
+    frontendDist: resolve(environment.FRONTEND_DIST_PATH ?? '../frontend/dist'),
+    workerEnabled: environment.ENABLE_WORKER !== 'false',
   };
 }
