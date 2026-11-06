@@ -1,4 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
+import type { TedCriteria } from '../domain/ted-criteria.js';
 import type {
   Answers,
   AiSuggestion,
@@ -11,6 +12,7 @@ export interface AnalysisData {
   inputRevision: number;
   inputSnapshot: Answers;
   referenceDate: string;
+  tedCriteriaSnapshot?: TedCriteria;
   eligibility: Eligibility[];
   groupContext: GroupContext;
   ruleVersion: string;
@@ -36,6 +38,7 @@ const schema = new Schema<AnalysisData>(
     inputRevision: { type: Number, required: true },
     inputSnapshot: { type: Schema.Types.Mixed, required: true },
     referenceDate: { type: String, required: true },
+    tedCriteriaSnapshot: { type: Schema.Types.Mixed },
     eligibility: { type: Schema.Types.Mixed, required: true },
     groupContext: { type: Schema.Types.Mixed, required: true },
     ruleVersion: String,

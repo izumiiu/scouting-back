@@ -5,6 +5,7 @@ import { Analysis } from '../models/Analysis.js';
 import { Review } from '../models/Review.js';
 import { AuditEvent } from '../models/AuditEvent.js';
 import { evaluate } from '../domain/eligibility.js';
+import { tedCriteria, isTedProgram } from '../domain/ted-criteria.js';
 import { deriveGroup } from '../domain/grouping.js';
 import {
   experts,
@@ -225,6 +226,7 @@ export async function queueAnalysis(
           organizationId: actor.organizationId,
           inputRevision: revision,
           inputSnapshot: current.input.answers,
+          tedCriteriaSnapshot: structuredClone(tedCriteria),
           referenceDate: current.input.referenceDate,
           eligibility: evaluate(
             current.input.answers,
@@ -321,10 +323,16 @@ export async function confirmReview(
       throw conflict('ต้องมีผล AI สำเร็จของข้อมูล/เกณฑ์ปัจจุบันก่อนยืนยัน');
     if (
       destination &&
-      run.eligibility.find((e) => e.program === destination)?.outcome !== 'pass'
+      !(isTedProgram(destination)
+        ? Boolean(
+            run.result?.tedAssessment &&
+            run.tedCriteriaSnapshot?.version === tedCriteria.version,
+          )
+        : run.eligibility.find((e) => e.program === destination)?.outcome ===
+          'pass')
     )
       throw badRequest(
-        'ยืนยันส่งต่อได้เฉพาะโครงการที่ผ่านเงื่อนไขตามข้อมูลที่ตรวจ กรณีข้อมูลขาดให้บันทึกรอตรวจเพิ่ม',
+        'UBI/TBI ต้องผ่านผลตรวจตามกฎ ส่วน TED ต้องมีผลวิเคราะห์ตามเกณฑ์ใหม่และเจ้าหน้าที่ตรวจพร้อมบันทึกเหตุผลก่อนส่งต่อ',
       );
     const updated = await ScoutingCase.findOneAndUpdate(
       {

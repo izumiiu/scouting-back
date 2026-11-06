@@ -4,6 +4,12 @@ import { ScoutingCase } from '../models/ScoutingCase.js';
 import { AuditEvent } from '../models/AuditEvent.js';
 import type { AiProvider } from './ai.contract.js';
 import { AppError } from '../utils/errors.js';
+import {
+  RULE_VERSION,
+  PROMPT_VERSION,
+  EXPERT_VERSION,
+} from '../domain/catalog.js';
+import { tedCriteria } from '../domain/ted-criteria.js';
 export async function processNextAnalysis(
   provider: AiProvider,
 ): Promise<boolean> {
@@ -50,6 +56,18 @@ export async function processNextAnalysis(
   );
   if (!run) return false;
   try {
+    // Never process an old queued request with a different prompt/rule version.
+    if (
+      run.ruleVersion !== RULE_VERSION ||
+      run.promptVersion !== PROMPT_VERSION ||
+      run.expertVersion !== EXPERT_VERSION ||
+      run.tedCriteriaSnapshot?.version !== tedCriteria.version
+    )
+      throw new AppError(
+        409,
+        'AI_RULES_CHANGED',
+        'เกณฑ์วิเคราะห์เปลี่ยนหลังเข้าคิว กรุณาสั่งวิเคราะห์ใหม่',
+      );
     if (run.provider !== provider.name)
       throw new AppError(
         409,

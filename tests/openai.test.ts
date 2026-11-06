@@ -3,6 +3,7 @@ import { OpenAiProvider } from '../src/services/openai.service.js';
 import type { Config } from '../src/config/env.js';
 import type { AnalysisData } from '../src/models/Analysis.js';
 import { evaluate } from '../src/domain/eligibility.js';
+import { tedCriteria } from '../src/domain/ted-criteria.js';
 const config: Config = {
   port: 4000,
   mongoUri: '',
@@ -20,10 +21,23 @@ const run = {
   provider: 'OpenAI',
   model: 'fixture-only',
   inputSnapshot: { B1: 'ต้องการตลาด' },
+  tedCriteriaSnapshot: structuredClone(tedCriteria),
   eligibility: evaluate({}, '2026-11-03'),
   groupContext: { group: null, status: 'unknown', warnings: [] },
 } as unknown as AnalysisData;
 const result = {
+  tedAssessment: {
+    developmentStage: {
+      stage: 'UNCLEAR' as const,
+      reason: 'ยังไม่มีรายละเอียดระยะพัฒนาเพียงพอ',
+      evidenceRefs: ['B1'],
+    },
+    classification: 'INSUFFICIENT_DATA' as const,
+    reason: 'มีเพียงข้อมูลความต้องการ ยังแยกประเภทไม่ได้',
+    alternativeReason: 'ยังไม่มีข้อมูลพอเทียบแนวคิดกับการพิสูจน์เชิงพาณิชย์',
+    evidenceRefs: ['B1'],
+    uncertainties: ['ยังไม่ทราบผลพัฒนาผลิตภัณฑ์และหลักฐานตลาด'],
+  },
   summary: 'ข้อความทดสอบจาก transport fixture',
   programRecommendations: [],
   expertRecommendations: [
@@ -34,7 +48,7 @@ const result = {
       evidenceRefs: ['B1'],
     },
   ],
-  missingInformation: [],
+  missingInformation: ['ขอรายละเอียดต้นแบบและผลทดสอบกับลูกค้า'],
 };
 describe('OpenAI Responses transport without real network calls', () => {
   it('sends schema-constrained request and parses completed output_text', async () => {
@@ -54,7 +68,12 @@ describe('OpenAI Responses transport without real network calls', () => {
       );
     };
     const response = await new OpenAiProvider(config, transport).analyze(run);
-    expect(response.result).toEqual(result);
+    const { fundingReadiness, ...ted } = response.result.tedAssessment!;
+    expect({ ...response.result, tedAssessment: ted }).toEqual(result);
+    expect(fundingReadiness).toMatchObject({
+      status: 'NOT_ASSESSED',
+      evidenceRefs: [],
+    });
     expect(response.requestId).toBe('fixture-request');
     expect(payload.store).toBe(false);
     expect(payload.text).toMatchObject({

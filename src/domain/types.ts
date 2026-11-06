@@ -13,13 +13,44 @@ export interface Eligibility {
   label: string;
   outcome: Outcome;
   conditions: Condition[];
+  assessmentMode?: 'qualitative';
 }
 export interface GroupContext {
   group: string | null;
   status: 'confirmed-inputs' | 'unknown';
   warnings: string[];
 }
+export type DevelopmentStageCode =
+  | 'CONCEPT'
+  | 'MOCKUP'
+  | 'EARLY_EVIDENCE'
+  | 'WORKING_PROTOTYPE'
+  | 'MARKET_PRODUCT'
+  | 'UNCLEAR';
+export interface TedDevelopmentStage {
+  stage: DevelopmentStageCode;
+  reason: string;
+  evidenceRefs: string[];
+}
+export interface TedFundingReadiness {
+  status: 'NEEDS_VERIFICATION' | 'NOT_ASSESSED';
+  reason: string;
+  evidenceRefs: string[];
+}
+export interface TedAssessment {
+  // Optional for historical analyses; current provider output requires developmentStage.
+  developmentStage?: TedDevelopmentStage;
+  // Added by the server, never accepted as an AI certification of funding.
+  fundingReadiness?: TedFundingReadiness;
+  classification: 'TED_IDEA' | 'TED_POC' | 'INSUFFICIENT_DATA';
+  reason: string;
+  alternativeReason: string;
+  evidenceRefs: string[];
+  uncertainties: string[];
+}
 export interface AiSuggestion {
+  // Optional only for historical results generated before qualitative TED.
+  tedAssessment?: TedAssessment;
   summary: string;
   programRecommendations: {
     program: string;

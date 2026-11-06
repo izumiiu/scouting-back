@@ -1,4 +1,5 @@
 import { programs } from './catalog.js';
+import { isTedProgram } from './ted-criteria.js';
 import type { Answers, Condition, Eligibility, Outcome } from './types.js';
 export const outcome = (value: boolean | null): Outcome =>
   value === null ? 'unknown' : value ? 'pass' : 'fail';
@@ -80,21 +81,11 @@ export function evaluate(a: Answers, reference: string): Eligibility[] {
       'เกณฑ์อ้างอิงรอรับรอง',
     ),
   ];
-  const trl = (low: number, high: number) =>
-    a.trlVerified === 'ใช่'
-      ? num('trlNumeric', (n) => n >= low && n <= high)
-      : null;
   const entity = c(
     'legal',
     'เป็นนิติบุคคล',
     typeof a.A6 === 'string' ? a.A6 === 'นิติบุคคล' : null,
     ['A6'],
-  );
-  const graduation = c(
-    'education',
-    'นิสิต หรือศิษย์เก่าจบไม่เกิน 5 ปี',
-    member,
-    ['A3', 'graduatedOn'],
   );
   const rules: Record<string, Condition[]> = {
     UBI_PRE: ubi,
@@ -104,45 +95,6 @@ export function evaluate(a: Answers, reference: string): Eligibility[] {
         'C2',
         'D1',
         'mvpVerified',
-      ]),
-    ],
-    TED_IDEA: [
-      graduation,
-      c('thai', 'สัญชาติไทย', yes('nationalityThai'), ['nationalityThai']),
-      c(
-        'team',
-        'ทีมรวมผู้สมัครอย่างน้อย 3 คน',
-        num('A5', (n) => n >= 3),
-        ['A5'],
-      ),
-      c('trl-idea', 'TRL 2–4 ที่มีหลักฐานตรวจแล้ว', trl(2, 4), [
-        'trlNumeric',
-        'trlVerified',
-      ]),
-      c('fellow', 'สมาชิก TED Fellow', yes('tedFellow'), ['tedFellow']),
-    ],
-    TED_POC: [
-      entity,
-      graduation,
-      c(
-        'thai-shares',
-        'ผู้ถือหุ้นไทยอย่างน้อย 51%',
-        num('thaiShares', (n) => n >= 51),
-        ['thaiShares'],
-      ),
-      c(
-        'student-shares',
-        'กลุ่มนิสิต/ศิษย์เก่าที่เข้าเกณฑ์ถือหุ้นมากกว่า 30%',
-        num('studentShares', (n) => n > 30),
-        ['studentShares'],
-        'ต้องตรวจวิธีรวมสัดส่วนหุ้นและบุคคลที่เข้าเงื่อนไข',
-      ),
-      c('director', 'กรรมการผู้มีอำนาจลงนาม', yes('authorizedDirector'), [
-        'authorizedDirector',
-      ]),
-      c('trl-poc', 'TRL 5–8 ที่มีหลักฐานตรวจแล้ว', trl(5, 8), [
-        'trlNumeric',
-        'trlVerified',
       ]),
     ],
     TBI: [
@@ -177,6 +129,14 @@ export function evaluate(a: Answers, reference: string): Eligibility[] {
     ],
   };
   return programs.map((p) => {
+    if (isTedProgram(p.code))
+      return {
+        program: p.code,
+        label: p.label,
+        assessmentMode: 'qualitative' as const,
+        outcome: 'unknown' as const,
+        conditions: [],
+      };
     const conditions = rules[p.code]!;
     return {
       program: p.code,

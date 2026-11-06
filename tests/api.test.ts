@@ -13,6 +13,8 @@ import { ScoutingCase } from '../src/models/ScoutingCase.js';
 import { RateBucket } from '../src/models/RateBucket.js';
 import { processNextAnalysis } from '../src/services/analysis.worker.js';
 import type { Config } from '../src/config/env.js';
+import type { AnalysisData } from '../src/models/Analysis.js';
+import { validateAiResult } from '../src/services/ai-analysis.js';
 const config: Config = {
   port: 4000,
   mongoUri: '',
@@ -57,6 +59,19 @@ const fixtureProvider = {
   analyze: async () => ({
     result: {
       summary: 'ผลจำลองสำหรับ integration test เท่านั้น',
+      tedAssessment: {
+        developmentStage: {
+          stage: 'UNCLEAR' as const,
+          reason: 'ยังไม่มีรายละเอียดระยะพัฒนาเพียงพอ',
+          evidenceRefs: ['B1'],
+        },
+        classification: 'INSUFFICIENT_DATA' as const,
+        reason: 'มีเพียงข้อมูลความต้องการ ยังแยกประเภทไม่ได้',
+        alternativeReason:
+          'ยังไม่มีข้อมูลพอเทียบแนวคิดกับการพิสูจน์เชิงพาณิชย์',
+        evidenceRefs: ['B1'],
+        uncertainties: ['ยังไม่ทราบผลพัฒนาผลิตภัณฑ์และหลักฐานตลาด'],
+      },
       programRecommendations: [],
       expertRecommendations: [
         {
@@ -66,7 +81,7 @@ const fixtureProvider = {
           evidenceRefs: ['D3'],
         },
       ],
-      missingInformation: [],
+      missingInformation: ['ขอข้อมูลเทคโนโลยีและตลาดเพิ่มเติม'],
     },
     requestId: null,
   }),
@@ -196,7 +211,10 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       })
       .expect(409);
     expect(await processNextAnalysis(fixtureProvider)).toBe(true);
-    expect((await Analysis.findOne({ caseId }))?.status).toBe('succeeded');
+    const finished = await Analysis.findOne({ caseId });
+    expect(finished?.status).toBe('succeeded');
+    expect(finished?.tedCriteriaSnapshot?.mode).toBe('qualitative');
+    expect(finished?.tedCriteriaSnapshot?.programs).toHaveLength(2);
   });
   it('confirms human result separately and makes identical retries idempotent', async () => {
     const run = await Analysis.findOne({ caseId });
@@ -456,6 +474,172 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       .set('Idempotency-Key', randomUUID())
       .send({ ...input, title: 'x'.repeat(160000) })
       .expect(413);
+  });
+  it('allows officer TED override while preserving UBI/TBI gates and historical snapshots', async () => {
+    const created = await agent
+      .post('/api/cases')
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        ...input,
+        title: 'TED qualitative integration',
+        answers: {
+          B1: 'ปัญหาลูกค้า',
+          D3: 'ยังไม่ทราบ',
+          A5: 1,
+          A6: 'ยังไม่จดทะเบียน',
+          thaiShares: 0,
+        },
+      })
+      .expect(201);
+    const id = created.body.caseRecord._id;
+    const queued = await agent
+      .post(`/api/cases/${id}/analyses`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ revision: 1 })
+      .expect(202);
+    await processNextAnalysis(fixtureProvider);
+    const run = await Analysis.findOne({ caseId: id });
+    const body = {
+      revision: 1,
+      decisionVersion: 0,
+      analysisId: String(run!._id),
+      expertAreas: [],
+      notes: 'เจ้าหน้าที่ตรวจหลักฐานแล้ว เลือก POC ต่างจาก AI ที่ยังไม่สรุป',
+    };
+    for (const destination of ['UBI_PRE', 'TBI']) {
+      await agent
+        .post(`/api/cases/${id}/reviews`)
+        .set(headers)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ...body, destination })
+        .expect(400);
+    }
+    await agent
+      .post(`/api/cases/${id}/reviews`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...body, destination: 'TED_POC', notes: '' })
+      .expect(400);
+    await agent
+      .post(`/api/cases/${id}/reviews`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...body, destination: 'TED_POC' })
+      .expect(201);
+    const detail = await agent.get(`/api/cases/${id}`).expect(200);
+    expect(detail.body.analyses[0].result.tedAssessment.classification).toBe(
+      'INSUFFICIENT_DATA',
+    );
+    expect(detail.body.reviews[0].destination).toBe('TED_POC');
+    expect(detail.body.analyses[0].tedCriteriaSnapshot).toEqual(
+      run!.tedCriteriaSnapshot,
+    );
+    expect(queued.body).toBeTruthy();
+    // A previous-version result remains in history but cannot authorize a new review.
+    await Analysis.updateOne(
+      { _id: run!._id },
+      { $set: { ruleVersion: 'historical-rule' } },
+    );
+    await agent
+      .post(`/api/cases/${id}/reviews`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...body, decisionVersion: 1, destination: 'TED_IDEA' })
+      .expect(409);
+    expect(
+      (await agent.get(`/api/cases/${id}`).expect(200)).body.analyses[0]
+        .ruleVersion,
+    ).toBe('historical-rule');
+  });
+  it('fails old queued work before calling the provider after criteria change', async () => {
+    const created = await agent
+      .post('/api/cases')
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send(input)
+      .expect(201);
+    const id = created.body.caseRecord._id;
+    await agent
+      .post(`/api/cases/${id}/analyses`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ revision: 1 })
+      .expect(202);
+    await Analysis.updateOne(
+      { caseId: id },
+      { $set: { promptVersion: 'old-prompt' } },
+    );
+    let called = false;
+    await processNextAnalysis({
+      ...fixtureProvider,
+      analyze: async () => {
+        called = true;
+        return fixtureProvider.analyze();
+      },
+    });
+    expect(called).toBe(false);
+    expect((await Analysis.findOne({ caseId: id }))?.status).toBe('failed');
+    expect((await ScoutingCase.findById(id))?.activeAnalysisId).toBeNull();
+  });
+  it('persists stage and pending POC contribution separately with no new form fields', async () => {
+    const answers = {
+      C2: 'มีต้นแบบ ทดสอบกับผู้ใช้จริง',
+      D1: 'ผลทดสอบผู้ใช้เบื้องต้น',
+      D2: 'ยังไม่มีรายได้',
+      D5: 'ร่วมลงทุนได้บางส่วน',
+    };
+    const created = await outsider
+      .post('/api/cases')
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...input, answers })
+      .expect(201);
+    const id = created.body.caseRecord._id;
+    await outsider
+      .post(`/api/cases/${id}/analyses`)
+      .set(headers)
+      .set('Idempotency-Key', randomUUID())
+      .send({ revision: 1 })
+      .expect(202);
+    await processNextAnalysis({
+      name: 'OpenAI',
+      analyze: async (run: AnalysisData) => ({
+        requestId: null,
+        result: validateAiResult(
+          {
+            summary: 'ต้นแบบที่เตรียมสร้างรายได้แรก',
+            tedAssessment: {
+              classification: 'TED_POC',
+              reason: 'มีต้นแบบและหลักฐานทดสอบเริ่มต้น',
+              alternativeReason: 'มีหลักฐานพัฒนาเกินแนวคิด',
+              evidenceRefs: ['C2', 'D1'],
+              uncertainties: ['ต้องตรวจรายละเอียดแผนรายได้'],
+              developmentStage: {
+                stage: 'WORKING_PROTOTYPE',
+                reason: 'มีรายงานต้นแบบและผลทดสอบ',
+                evidenceRefs: ['C2', 'D1'],
+              },
+            },
+            programRecommendations: [],
+            expertRecommendations: [],
+            missingInformation: [],
+          },
+          run,
+        ),
+      }),
+    });
+    const detail = await outsider.get(`/api/cases/${id}`).expect(200);
+    expect(detail.body.analyses[0].result.tedAssessment).toMatchObject({
+      classification: 'TED_POC',
+      developmentStage: { stage: 'WORKING_PROTOTYPE' },
+      fundingReadiness: { status: 'NEEDS_VERIFICATION', evidenceRefs: ['D5'] },
+    });
+    expect(detail.body.caseRecord.input.answers).toEqual(answers);
+    expect(
+      detail.body.analyses[0].tedCriteriaSnapshot.stageGuidance.length,
+    ).toBeGreaterThan(0);
   });
   it('revokes token on logout', async () => {
     await agent.post('/api/auth/logout').set(headers).send({}).expect(204);

@@ -4,6 +4,7 @@ import { createAiProvider } from '../src/services/ai-provider.factory.js';
 import type { Config } from '../src/config/env.js';
 import type { AnalysisData } from '../src/models/Analysis.js';
 import { evaluate } from '../src/domain/eligibility.js';
+import { tedCriteria } from '../src/domain/ted-criteria.js';
 import { buildAnalysisSchema } from '../src/services/ai-analysis.js';
 
 const config: Config = {
@@ -23,10 +24,23 @@ const run = {
   provider: 'Groq',
   model: 'openai/gpt-oss-120b',
   inputSnapshot: { B1: 'ต้องการตลาด' },
+  tedCriteriaSnapshot: structuredClone(tedCriteria),
   eligibility: evaluate({}, '2026-11-04'),
   groupContext: { group: null, status: 'unknown', warnings: [] },
 } as unknown as AnalysisData;
 const result = {
+  tedAssessment: {
+    developmentStage: {
+      stage: 'UNCLEAR' as const,
+      reason: 'ยังไม่มีรายละเอียดระยะพัฒนาเพียงพอ',
+      evidenceRefs: ['B1'],
+    },
+    classification: 'INSUFFICIENT_DATA' as const,
+    reason: 'มีเพียงข้อมูลความต้องการ ยังแยกประเภทไม่ได้',
+    alternativeReason: 'ยังไม่มีข้อมูลพอเทียบแนวคิดกับการพิสูจน์เชิงพาณิชย์',
+    evidenceRefs: ['B1'],
+    uncertainties: ['ยังไม่ทราบผลพัฒนาผลิตภัณฑ์และหลักฐานตลาด'],
+  },
   summary: 'ผลจาก transport fixture เท่านั้น',
   programRecommendations: [],
   expertRecommendations: [
@@ -37,7 +51,7 @@ const result = {
       evidenceRefs: ['B1'],
     },
   ],
-  missingInformation: [],
+  missingInformation: ['ขอรายละเอียดต้นแบบและผลทดสอบกับลูกค้า'],
 };
 function completed(value: unknown = result) {
   return new Response(
@@ -80,11 +94,35 @@ describe('Groq adapter without real network calls', () => {
     });
     expect(payload.input).not.toContain('contactName');
     expect(
+      payload.text.format.schema.properties.programRecommendations.items
+        .properties.evidenceRefs.minItems,
+    ).toBe(1);
+    expect(
+      payload.text.format.schema.properties.expertRecommendations.items
+        .properties.evidenceRefs.minItems,
+    ).toBe(1);
+    expect(
       payload.text.format.schema.properties.expertRecommendations.items
         .properties.evidenceRefs.items.enum,
     ).toEqual(['B1']);
-    expect(JSON.parse(payload.input).availableEvidenceRefs).toEqual(['B1']);
-    expect(response.result).toEqual(result);
+    const sentInput = JSON.parse(payload.input);
+    expect(sentInput.availableEvidenceRefs).toEqual(['B1']);
+    expect(sentInput.tedCriteria).toEqual(tedCriteria);
+    expect(
+      sentInput.deterministicEligibility.map(
+        (p: { program: string }) => p.program,
+      ),
+    ).toEqual(['UBI_PRE', 'UBI_STARTUP', 'TBI']);
+    expect(
+      payload.text.format.schema.properties.programRecommendations.items
+        .properties.program.enum,
+    ).not.toContain('TED_IDEA');
+    const { fundingReadiness, ...ted } = response.result.tedAssessment!;
+    expect({ ...response.result, tedAssessment: ted }).toEqual(result);
+    expect(fundingReadiness).toMatchObject({
+      status: 'NOT_ASSESSED',
+      evidenceRefs: [],
+    });
     expect(response.requestId).toBe('fixture-groq-response');
   });
   it('rejects a narrative program decision in the descriptive summary', async () => {

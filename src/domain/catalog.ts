@@ -1,6 +1,6 @@
-export const RULE_VERSION = 'scouting-v2-2569-reference-1';
+export const RULE_VERSION = 'scouting-ted-qualitative-2026-11-06-2';
 export const EXPERT_VERSION = 'development-funding-v2-2026-11-02-draft';
-export const PROMPT_VERSION = 'scouting-program-experts-4';
+export const PROMPT_VERSION = 'scouting-program-experts-6-ted-stage';
 export const programs = [
   { code: 'UBI_PRE', label: 'UBI Pre-incubation' },
   { code: 'UBI_STARTUP', label: 'UBI Startup' },
@@ -57,7 +57,7 @@ const field = (
   ...(max !== undefined ? { max } : {}),
   ...(help ? { help } : {}),
 });
-export const fields: FormField[] = [
+const formFields: FormField[] = [
   field(
     'province',
     'A · ผู้ประกอบการและคุณสมบัติ',
@@ -240,7 +240,7 @@ export const fields: FormField[] = [
     'number',
     undefined,
     9,
-    'แยกจากระดับต้น/กลาง/พร้อม ไม่ให้ AI แปลงแทน',
+    'ข้อมูลประกอบ ไม่ใช้ช่วง TRL ตัวเลขตัดสิทธิ์ TED รุ่นใหม่ และไม่ให้ AI แปลงระดับสามช่วงเป็นตัวเลข',
   ),
   field(
     'trlVerified',
@@ -391,3 +391,21 @@ export const fields: FormField[] = [
     ['ใช่', 'ไม่ใช่'],
   ),
 ];
+
+export const historicalTedFields = new Set([
+  'studentShares',
+  'thaiShares',
+  'authorizedDirector',
+  'nationalityThai',
+  'tedFellow',
+  'trlNumeric',
+  'trlVerified',
+]);
+export const fields: FormField[] = formFields.map((item) =>
+  historicalTedFields.has(item.id)
+    ? {
+        ...item,
+        help: `${item.help ? `${item.help} · ` : ''}ข้อมูลประกอบเดิม ไม่ใช่เงื่อนไขตัดสิทธิ์ TED รุ่นจำแนกเชิงคุณภาพ`,
+      }
+    : item,
+);

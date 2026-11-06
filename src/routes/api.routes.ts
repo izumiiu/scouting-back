@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { tedCriteria } from '../domain/ted-criteria.js';
 import { authController } from '../controllers/auth.controller.js';
 import { caseController } from '../controllers/case.controller.js';
 import { authentication } from '../middleware/auth.js';
@@ -25,6 +26,7 @@ export function apiRoutes(config: Config) {
       fields,
       experts,
       programs,
+      tedCriteria,
       ruleVersion: RULE_VERSION,
       expertVersion: EXPERT_VERSION,
       rulesApproval: 'draft',

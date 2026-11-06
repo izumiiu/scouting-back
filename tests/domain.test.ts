@@ -17,23 +17,6 @@ const input: CaseInput = {
   allowAiProcessing: false,
   answers: {},
 };
-const idea: Answers = {
-  A3: 'นิสิต',
-  nationalityThai: 'ใช่',
-  A5: 3,
-  trlNumeric: 2,
-  trlVerified: 'ใช่',
-  tedFellow: 'ใช่',
-};
-const poc: Answers = {
-  A3: 'นิสิต',
-  A6: 'นิติบุคคล',
-  thaiShares: 51,
-  studentShares: 31,
-  authorizedDirector: 'ใช่',
-  trlNumeric: 5,
-  trlVerified: 'ใช่',
-};
 const outcome = (answers: Answers, code: string) =>
   evaluate(answers, '2026-11-03').find((x) => x.program === code)!.outcome;
 describe('program criteria boundaries', () => {
@@ -42,47 +25,54 @@ describe('program criteria boundaries', () => {
       evaluate({}, '2026-11-03').every((x) => x.outcome === 'unknown'),
     ).toBe(true));
   it.each([
-    [1, 'fail'],
-    [2, 'pass'],
-    [4, 'pass'],
-    [5, 'fail'],
-  ])('IDEA numeric TRL %s => %s', (trl, expected) =>
-    expect(outcome({ ...idea, trlNumeric: trl }, 'TED_IDEA')).toBe(expected),
-  );
-  it('team includes applicant and requires 3', () =>
-    expect(outcome({ ...idea, A5: 2 }, 'TED_IDEA')).toBe('fail'));
-  it('unverified numeric TRL cannot establish eligibility', () =>
-    expect(outcome({ ...idea, trlVerified: 'ไม่ใช่' }, 'TED_IDEA')).toBe(
+    {},
+    {
+      A3: 'ผู้ประกอบการ',
+      A5: 1,
+      nationalityThai: 'ไม่ใช่',
+      tedFellow: 'ไม่ใช่',
+      trlNumeric: 9,
+      trlVerified: 'ไม่ใช่',
+    },
+    {
+      A6: 'ยังไม่จดทะเบียน',
+      thaiShares: 0,
+      studentShares: 0,
+      authorizedDirector: 'ไม่ใช่',
+    },
+    {
+      A3: 'ศิษย์เก่า',
+      graduatedOn: '2000-01-01',
+      trlNumeric: 1,
+      trlVerified: 'ใช่',
+    },
+  ] as Answers[])('never applies retired TED gates to %j', (answers) => {
+    for (const program of ['TED_IDEA', 'TED_POC']) {
+      expect(
+        evaluate(answers, '2026-11-06').find((p) => p.program === program),
+      ).toMatchObject({
+        assessmentMode: 'qualitative',
+        outcome: 'unknown',
+        conditions: [],
+      });
+    }
+  });
+  it('preserves UBI alumni anniversary, institution and MVP rules', () => {
+    const answers = {
+      A3: 'ศิษย์เก่า',
+      graduatedOn: '2021-11-03',
+      institution: 'มหาวิทยาลัยนเรศวร',
+      A6: 'ยังไม่จดทะเบียน',
+      mvpVerified: 'ใช่',
+    };
+    expect(outcome(answers, 'UBI_PRE')).toBe('pass');
+    expect(outcome(answers, 'UBI_STARTUP')).toBe('pass');
+    expect(outcome({ ...answers, graduatedOn: '2021-11-02' }, 'UBI_PRE')).toBe(
       'unknown',
-    ));
-  it.each([
-    [30, 'fail'],
-    [30.01, 'pass'],
-  ])('POC student shares %s => %s', (shares, expected) =>
-    expect(outcome({ ...poc, studentShares: shares }, 'TED_POC')).toBe(
-      expected,
-    ),
-  );
-  it('Thai shares 51 is inclusive', () =>
-    expect(outcome(poc, 'TED_POC')).toBe('pass'));
-  it('Thai shares below 51 fail', () =>
-    expect(outcome({ ...poc, thaiShares: 50.99 }, 'TED_POC')).toBe('fail'));
-  it.each([5, 8])('POC numeric TRL %s is inclusive', (trl) =>
-    expect(outcome({ ...poc, trlNumeric: trl }, 'TED_POC')).toBe('pass'),
-  );
-  it('education 5-year anniversary inclusive; following day out', () => {
-    expect(
-      outcome(
-        { ...idea, A3: 'ศิษย์เก่า', graduatedOn: '2021-11-03' },
-        'TED_IDEA',
-      ),
-    ).toBe('pass');
-    expect(
-      outcome(
-        { ...idea, A3: 'ศิษย์เก่า', graduatedOn: '2021-11-02' },
-        'TED_IDEA',
-      ),
-    ).toBe('fail');
+    );
+    expect(outcome({ ...answers, mvpVerified: 'ไม่ใช่' }, 'UBI_STARTUP')).toBe(
+      'fail',
+    );
   });
   it.each([
     [19, 'fail'],
@@ -103,7 +93,7 @@ describe('program criteria boundaries', () => {
     ).toBe(expected),
   );
   it('known failure remains failure while other fields unknown', () =>
-    expect(outcome({ thaiShares: 20 }, 'TED_POC')).toBe('fail'));
+    expect(outcome({ A4: 19 }, 'TBI')).toBe('fail'));
   it('birth dates use completed age at reference date', () => {
     expect(ageOn('2006-11-03', '2026-11-03')).toBe(20);
     expect(ageOn('2006-11-04', '2026-11-03')).toBe(19);
@@ -195,9 +185,21 @@ describe('reference ambiguity and validation', () => {
 describe('untrusted AI output', () => {
   const run = {
     inputSnapshot: { B1: 'ต้องการหาตลาด' },
-    eligibility: evaluate({ thaiShares: 1 }, '2026-11-03'),
+    eligibility: evaluate({ A4: 19 }, '2026-11-03'),
   };
   const base = {
+    tedAssessment: {
+      developmentStage: {
+        stage: 'UNCLEAR' as const,
+        reason: 'ยังไม่มีรายละเอียดระยะพัฒนาเพียงพอ',
+        evidenceRefs: ['B1'],
+      },
+      classification: 'INSUFFICIENT_DATA' as const,
+      reason: 'มีเพียงข้อมูลความต้องการ ยังแยกประเภทไม่ได้',
+      alternativeReason: 'ยังไม่มีข้อมูลพอเทียบแนวคิดกับการพิสูจน์เชิงพาณิชย์',
+      evidenceRefs: ['B1'],
+      uncertainties: ['ยังไม่ทราบผลพัฒนาผลิตภัณฑ์และหลักฐานตลาด'],
+    },
     summary: 'สรุปจากข้อมูล',
     programRecommendations: [],
     expertRecommendations: [
@@ -208,7 +210,7 @@ describe('untrusted AI output', () => {
         evidenceRefs: ['B1'],
       },
     ],
-    missingInformation: [],
+    missingInformation: ['ขอผลทดสอบตลาดและสถานะผลิตภัณฑ์'],
   };
   it('allows expert advice while program eligibility incomplete', () =>
     expect(validateAiResult(base, run).expertRecommendations).toHaveLength(1));
@@ -242,7 +244,7 @@ describe('untrusted AI output', () => {
         {
           ...base,
           programRecommendations: [
-            { program: 'TED_POC', reason: 'น่าสนใจ', evidenceRefs: ['B1'] },
+            { program: 'TBI', reason: 'น่าสนใจ', evidenceRefs: ['B1'] },
           ],
         },
         run,
