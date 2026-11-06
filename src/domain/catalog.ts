@@ -1,6 +1,6 @@
 export const RULE_VERSION = 'scouting-v2-2569-reference-1';
 export const EXPERT_VERSION = 'development-funding-v2-2026-11-02-draft';
-export const PROMPT_VERSION = 'scouting-program-experts-3';
+export const PROMPT_VERSION = 'scouting-program-experts-4';
 export const programs = [
   { code: 'UBI_PRE', label: 'UBI Pre-incubation' },
   { code: 'UBI_STARTUP', label: 'UBI Startup' },
