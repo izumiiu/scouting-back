@@ -1,3 +1,5 @@
+import { tedAiReference, type TedAiReference } from './ted-ai-reference.js';
+
 // Qualitative reference transcribed from the two TED Youth Startup images supplied
 // by the user. Weights are intentionally omitted: this workflow does not score.
 export interface TedCriteria {
@@ -6,6 +8,7 @@ export interface TedCriteria {
   mode: 'qualitative';
   stageGuidance?: string[];
   fundingGuidance?: string;
+  aiReference?: TedAiReference;
   programs: {
     program: string;
     focus: string;
@@ -13,10 +16,11 @@ export interface TedCriteria {
   }[];
 }
 export const tedCriteria: TedCriteria = {
-  version: 'ted-youth-startup-2026-11-06-qualitative-2',
+  version: 'ted-youth-startup-2026-11-06-qualitative-3',
   source:
     'ภาพเกณฑ์ TED Youth Startup IDEA/POC และภาพอธิบายระยะโครงการเพิ่มเติมที่ผู้ใช้ให้ วันที่ 6 พฤศจิกายน 2569 ใช้แทนเกณฑ์ TED เดิม',
   mode: 'qualitative',
+  aiReference: tedAiReference,
   stageGuidance: [
     'เริ่มจากสิ่งที่ทำได้จริงในปัจจุบัน แยกแนวคิด, แบบจำลอง/Mock-up ที่ยังไม่พิสูจน์การทำงาน, ผลวิจัย/การพิสูจน์หลักการหรือหลักฐานเริ่มต้น, ต้นแบบที่มีหลักฐานว่าทำงานได้, และผลิตภัณฑ์ที่มีหลักฐานจำหน่าย/ให้บริการจริง',
     'IDEA ในภาพเน้นระยะยังไม่มีผลิตภัณฑ์จริงและยังไม่มีรายได้ ประเมินคุณภาพปัญหา ความเข้าใจผู้ใช้/ตลาด นวัตกรรม ฐานเทคโนโลยี และความเป็นไปได้เชิงพาณิชย์เบื้องต้น',

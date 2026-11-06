@@ -1,6 +1,7 @@
 import type { Config } from '../config/env.js';
 import type { AnalysisData } from '../models/Analysis.js';
 import { AppError } from '../utils/errors.js';
+import { providerError } from './provider-error.js';
 import type {
   AiProvider,
   AiProviderId,
@@ -44,6 +45,10 @@ export class ResponsesProvider implements AiProvider {
         'AI_PROVIDER_CHANGED',
         'ผู้ให้บริการ AI ของงานไม่ตรงกับระบบ กรุณาสั่งวิเคราะห์ใหม่',
       );
+    // Build locally before the network try/catch: a stale criteria snapshot must
+    // retain AI_RULES_CHANGED rather than masquerading as a connection failure.
+    const input = buildAnalysisInput(run);
+    const schema = buildAnalysisSchema(run);
     let response: Response;
     try {
       response = await this.transport(endpoints[this.id], {
@@ -61,14 +66,14 @@ export class ResponsesProvider implements AiProvider {
             ? { reasoning: { effort: 'low' } }
             : {}),
           instructions: analysisInstructions,
-          input: buildAnalysisInput(run),
-          max_output_tokens: 3500,
+          input,
+          max_output_tokens: 2500,
           text: {
             format: {
               type: 'json_schema',
               name: 'scouting_analysis',
               strict: true,
-              schema: buildAnalysisSchema(run),
+              schema,
             },
           },
         }),
@@ -81,14 +86,7 @@ export class ResponsesProvider implements AiProvider {
         `เชื่อมต่อ ${this.name} ไม่สำเร็จหรือหมดเวลา โปรดลองใหม่ภายหลัง`,
       );
     }
-    if (!response.ok)
-      throw new AppError(
-        502,
-        'AI_PROVIDER_ERROR',
-        response.status === 429
-          ? `${this.name} จำกัดคำขอหรือโควตาไม่พอ กรุณาตรวจโควตาและลองใหม่ภายหลัง`
-          : `${this.name} ไม่สามารถประมวลผลคำขอนี้ได้ กรุณาตรวจ key สิทธิ์โมเดล และการตั้งค่า`,
-      );
+    if (!response.ok) throw await providerError(response, this.name);
     let body: {
       id?: string;
       status?: string;

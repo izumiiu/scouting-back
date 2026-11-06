@@ -101,13 +101,14 @@ describe('Groq adapter without real network calls', () => {
       payload.text.format.schema.properties.expertRecommendations.items
         .properties.evidenceRefs.minItems,
     ).toBe(1);
-    expect(
-      payload.text.format.schema.properties.expertRecommendations.items
-        .properties.evidenceRefs.items.enum,
-    ).toEqual(['B1']);
+    expect(payload.text.format.schema.$defs.evidenceRef.enum).toEqual(['B1']);
     const sentInput = JSON.parse(payload.input);
     expect(sentInput.availableEvidenceRefs).toEqual(['B1']);
-    expect(sentInput.tedCriteria).toEqual(tedCriteria);
+    expect(sentInput.tedCriteria).toEqual({
+      version: tedCriteria.version,
+      ...tedCriteria.aiReference,
+    });
+    expect(payload.max_output_tokens).toBe(2500);
     expect(
       sentInput.deterministicEligibility.map(
         (p: { program: string }) => p.program,
@@ -143,14 +144,8 @@ describe('Groq adapter without real network calls', () => {
         flag: false,
       },
     });
-    expect(
-      schema.properties.expertRecommendations.items.properties.evidenceRefs
-        .items.enum,
-    ).toEqual(['B1', 'amount', 'flag']);
-    expect(
-      schema.properties.programRecommendations.items.properties.evidenceRefs
-        .items.enum,
-    ).not.toContain('D2');
+    expect(schema.$defs.evidenceRef.enum).toEqual(['B1', 'amount', 'flag']);
+    expect(schema.$defs.evidenceRef.enum).not.toContain('D2');
   });
   it('rejects invented evidence rather than persisting it as successful analysis', async () => {
     const transport: typeof fetch = async () =>
@@ -174,7 +169,7 @@ describe('Groq adapter without real network calls', () => {
     await expect(
       new GroqProvider(config, transport).analyze(run),
     ).rejects.toMatchObject({
-      code: 'AI_PROVIDER_ERROR',
+      code: 'AI_RATE_LIMITED',
       message: expect.stringContaining('Groq'),
     });
     expect(transport).toHaveBeenCalledTimes(1);

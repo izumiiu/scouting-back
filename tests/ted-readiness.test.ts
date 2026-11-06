@@ -172,13 +172,13 @@ describe('separate stage/classification and POC contribution verification', () =
   it('includes stage and funding separation in the immutable criteria payload', () => {
     const payload = JSON.parse(buildAnalysisInput(run));
     expect(payload.tedCriteria.stageGuidance).toEqual(
-      run.tedCriteriaSnapshot?.stageGuidance,
+      run.tedCriteriaSnapshot?.aiReference?.stageGuidance,
     );
     expect(payload.tedCriteria.fundingGuidance).toEqual(
-      run.tedCriteriaSnapshot?.fundingGuidance,
+      run.tedCriteriaSnapshot?.aiReference?.fundingGuidance,
     );
     expect(payload.tedCriteria.version).toBe(
-      'ted-youth-startup-2026-11-06-qualitative-2',
+      'ted-youth-startup-2026-11-06-qualitative-3',
     );
   });
 });

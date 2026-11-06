@@ -142,7 +142,10 @@ describe('qualitative TED contract', () => {
   });
   it('sends snapshotted criteria, never old TED gates or scoring fields', () => {
     const input = JSON.parse(buildAnalysisInput(run));
-    expect(input.tedCriteria).toEqual(run.tedCriteriaSnapshot);
+    expect(input.tedCriteria).toEqual({
+      version: run.tedCriteriaSnapshot!.version,
+      ...run.tedCriteriaSnapshot!.aiReference,
+    });
     expect(
       input.fieldDefinitions.map((f: { id: string }) => f.id),
     ).not.toContain('trlNumeric');
@@ -157,7 +160,7 @@ describe('qualitative TED contract', () => {
     expect(
       input.deterministicEligibility.map((p: { program: string }) => p.program),
     ).toEqual(['UBI_PRE', 'UBI_STARTUP', 'TBI']);
-    expect(JSON.stringify(input.tedCriteria)).not.toContain('score');
+    expect(JSON.stringify(input.tedCriteria)).not.toContain('"score":');
     expect(() =>
       buildAnalysisInput({ ...run, tedCriteriaSnapshot: undefined }),
     ).toThrow();
