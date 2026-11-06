@@ -1,3 +1,5 @@
+import type { AiFollowUp } from './follow-ups.js';
+
 export type FieldValue = string | number | boolean | string[] | null;
 export type Answers = Record<string, FieldValue>;
 export type Outcome = 'pass' | 'fail' | 'unknown';
@@ -64,6 +66,8 @@ export interface AiSuggestion {
     evidenceRefs: string[];
   }[];
   missingInformation: string[];
+  // Optional on historical results. Never infer scopes for old untagged prose.
+  followUps?: AiFollowUp[];
 }
 export interface CaseInput {
   title: string;

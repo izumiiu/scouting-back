@@ -624,7 +624,7 @@ describe('authenticated case workflow with transactional MongoDB', () => {
             },
             programRecommendations: [],
             expertRecommendations: [],
-            missingInformation: [],
+            missingInformation: [{ scope: 'TED_POC_FUNDING', question: 'ขอจำนวนเงินสมทบและฐานคำนวณสำหรับ POC' }],
           },
           run,
         ),
@@ -637,6 +637,8 @@ describe('authenticated case workflow with transactional MongoDB', () => {
       fundingReadiness: { status: 'NEEDS_VERIFICATION', evidenceRefs: ['D5'] },
     });
     expect(detail.body.caseRecord.input.answers).toEqual(answers);
+    expect(detail.body.analyses[0].result.followUps).toEqual([{ scope: 'TED_POC_FUNDING', question: 'ขอจำนวนเงินสมทบและฐานคำนวณสำหรับ POC' }]);
+    expect(detail.body.analyses[0].result.missingInformation).toEqual(['ขอจำนวนเงินสมทบและฐานคำนวณสำหรับ POC']);
     expect(
       detail.body.analyses[0].tedCriteriaSnapshot.stageGuidance.length,
     ).toBeGreaterThan(0);

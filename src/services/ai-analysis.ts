@@ -4,6 +4,7 @@ import type { AnalysisData } from '../models/Analysis.js';
 import { AppError } from '../utils/errors.js';
 import { isTedProgram } from '../domain/ted-criteria.js';
 import { tedFundingReadiness } from '../domain/ted-readiness.js';
+import { followUpScopes, type AiFollowUp } from '../domain/follow-ups.js';
 const str = { type: 'string' };
 const array = <T>(items: T) => ({ type: 'array', items });
 const obj = <T extends Record<string, unknown>>(properties: T) => ({
@@ -101,11 +102,12 @@ export function buildAnalysisSchema(run: Pick<AnalysisData, 'inputSnapshot'>) {
         evidenceRefs: citedRefs,
       }),
     ),
-    missingInformation: array({
-      type: 'string',
-      description:
-        'A specific Thai question or verification task using human-readable field names, never a bare field identifier. Distinguish missing answers, unverified evidence, and pending rule clarification. Ask only relevant questions and do not list an already supplied fact as absent.',
-    }),
+    // Generate each question once. The server derives the legacy string array
+    // after validation, so grouping does not duplicate output token usage.
+    missingInformation: array(obj({
+      scope: { type: 'string', enum: [...followUpScopes] },
+      question: { type: 'string', description: 'Specific Thai follow-up using readable field names. Tag the actual applicable route, POC contribution, or cross-program DEVELOPMENT; do not invent mandatory grant requirements.' },
+    })),
   });
   return { ...schema, $defs: { evidenceRef } };
 }
@@ -137,6 +139,16 @@ export function validateAiResult(
     return fail();
   const isText = (x: unknown): x is string =>
     typeof x === 'string' && x.trim().length > 0 && x.length <= 5000;
+  const isFollowUp = (item: unknown): item is AiFollowUp => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const value = item as Record<string, unknown>;
+    return followUpScopes.some((scope) => scope === value.scope) && isText(value.question) &&
+      Object.keys(value).every((key) => key === 'scope' || key === 'question');
+  };
+  // Legacy strings are safe to preserve as unassigned advice. The current
+  // provider schema requires tagged objects; mixed arrays are never accepted.
+  const validFollowUps = (items: unknown) => Array.isArray(items) &&
+    items.length <= 30 && (items.every(isText) || items.every(isFollowUp));
   const hasEvidence = (refs: unknown) =>
     Array.isArray(refs) &&
     refs.length > 0 &&
@@ -154,9 +166,7 @@ export function validateAiResult(
     r.programRecommendations.length > 3 ||
     !Array.isArray(r.expertRecommendations) ||
     r.expertRecommendations.length > 3 ||
-    !Array.isArray(r.missingInformation) ||
-    r.missingInformation.length > 30 ||
-    !r.missingInformation.every(isText)
+    !validFollowUps(r.missingInformation)
   )
     return fail();
   const ted = r.tedAssessment;
@@ -177,7 +187,7 @@ export function validateAiResult(
     (t.classification !== 'INSUFFICIENT_DATA' &&
       !hasEvidence(t.evidenceRefs)) ||
     (t.classification === 'INSUFFICIENT_DATA' &&
-      (!t.uncertainties.length || !r.missingInformation.length)) ||
+      (!t.uncertainties.length || !(r.missingInformation as unknown[]).length)) ||
     Object.keys(t).some(
       (key) =>
         ![
@@ -246,8 +256,13 @@ export function validateAiResult(
   )
     return fail();
   const result = raw as AiSuggestion;
+  const missing = r.missingInformation as (string | AiFollowUp)[];
+  const scoped = missing.length > 0 && typeof missing[0] !== 'string'
+    ? missing as AiFollowUp[] : undefined;
   return {
     ...result,
+    missingInformation: scoped ? scoped.map((item) => item.question) : missing as string[],
+    ...(scoped ? { followUps: scoped } : {}),
     tedAssessment: {
       ...result.tedAssessment!,
       fundingReadiness: tedFundingReadiness(
@@ -264,6 +279,7 @@ TED: use only tedCriteria, all domains and stage/funding guidance. Assess presen
 Retired TED gates are forbidden: nationality, student/alumni status, minimum team size, shares, Fellow, numeric TRL bands, mandatory incorporation. Never convert 3-level TRL bands to numbers or infer team ability/commitment/leadership from headcount/hours.
 UBI/TBI: deterministicEligibility outcomes are authoritative; unknown is undecided, not failed. Never recommend fail, invent gates or imply other passed routes failed. Only UBI/TBI in programRecommendations; distinguish any route-specific follow-ups. Full rules remain in the officer UI.
 EXPERTS: choose expertAreas using evidenced needs, groupExpertAreas/context only as guidance, not mandatory checklists. Unknown groups can support draft advice. Do not invent needs from TED criteria, impose POC funding/2-year requirements on IDEA, or mandate patents/standards; refer for expert review.
+FOLLOW-UPS: missingInformation contains {scope,question}. Use TED for shared classification evidence, TED_IDEA/TED_POC for route-specific evidence, TED_POC_FUNDING only for contribution verification, UBI_PRE/UBI_STARTUP/TBI only for that route, and DEVELOPMENT for business/expert needs without an exclusive route. Do not classify age/network history as TED, nor treat IP/licensing as a universal grant gate. Never duplicate the same question across scopes; use the shared scope when appropriate.
 EVIDENCE: use only populated availableEvidenceRefs; >=1 for every selected route/program/expert and non-UNCLEAR stage. Empty citations only for uncertain TED/stage. No evidence => uncertain TED/stage and empty suggestions. Missing fields are questions, not evidence. Separate reported facts, unverified evidence and pending rule approval. All results are officer-review drafts; UBI/TBI/expert references await owner approval.`;
 
 export function buildAnalysisInput(run: AnalysisData) {
