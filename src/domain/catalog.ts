@@ -1,6 +1,6 @@
 export const RULE_VERSION = 'scouting-ted-qualitative-2026-11-06-3';
 export const EXPERT_VERSION = 'development-funding-v2-2026-11-02-draft';
-export const PROMPT_VERSION = 'scouting-program-experts-8-scoped-followups';
+export const PROMPT_VERSION = 'scouting-program-experts-9-followup-details';
 export const programs = [
   { code: 'UBI_PRE', label: 'UBI Pre-incubation' },
   { code: 'UBI_STARTUP', label: 'UBI Startup' },

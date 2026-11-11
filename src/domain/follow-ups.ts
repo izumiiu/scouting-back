@@ -6,4 +6,7 @@ export type FollowUpScope = (typeof followUpScopes)[number];
 export interface AiFollowUp {
   scope: FollowUpScope;
   question: string;
+  // Historical follow-ups have neither field; current AI output requires both.
+  topic?: string;
+  impact?: string;
 }

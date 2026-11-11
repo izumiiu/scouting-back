@@ -14,9 +14,9 @@ const raw = {
   programRecommendations: [], expertRecommendations: [], missingInformation: [],
 };
 describe('scoped AI follow-ups without duplicate generated text', () => {
-  it('requires scope and question in the provider schema', () => {
+  it('requires a readable topic and assessment impact in the provider schema', () => {
     const item = buildAnalysisSchema(run).properties.missingInformation.items;
-    expect(item.required).toEqual(['scope', 'question']);
+    expect(item.required).toEqual(['scope', 'question', 'topic', 'impact']);
     expect(item.properties.scope.enum).toEqual([...followUpScopes]);
     expect(item.additionalProperties).toBe(false);
   });
@@ -42,6 +42,11 @@ describe('scoped AI follow-ups without duplicate generated text', () => {
     [{ scope: 'ALL', question: 'ถามเพิ่ม' }], [{ scope: 'UPI', question: 'ถามเพิ่ม' }],
     [{ scope: 'TBI', question: '' }], [{ scope: 'TED', question: 123 }],
     [{ scope: 'TED', question: 'ถามเพิ่ม', approved: true }],
+    [{ scope: 'TED', question: 'ถามเพิ่ม', topic: 'ตลาด' }],
+    [{ scope: 'TED', question: 'ถามเพิ่ม', topic: '', impact: 'ยังแยกไม่ได้' }],
+    [{ scope: 'TED', question: 'ถามเพิ่ม', topic: 'ตลาด', impact: null }],
+    [{ scope: 'TED', question: 'ถามเพิ่ม', topic: 'ก'.repeat(201), impact: 'ยังแยกไม่ได้' }],
+    [{ scope: 'TED', question: 'ถามเพิ่ม', topic: 'ตลาด', impact: 'ก'.repeat(601) }],
     ['ข้อความเก่า', { scope: 'TED', question: 'ถามเพิ่ม' }], [null],
   ])('rejects invalid or mixed scope entries %j', (missingInformation) => {
     expect(() => validateAiResult({ ...raw, missingInformation }, run)).toThrow();
@@ -50,12 +55,12 @@ describe('scoped AI follow-ups without duplicate generated text', () => {
     expect(() => validateAiResult({ ...raw, followUps: [{ scope: 'TBI', question: 'แอบเพิ่ม' }] }, run)).toThrow();
   });
   it('normalizes tagged transport output with only one provider request', async () => {
-    const questions = [{ scope: 'TED_IDEA', question: 'ขอหลักฐานความเข้าใจผู้ใช้' }];
+    const questions = [{ scope: 'TED_IDEA', question: 'เคยสัมภาษณ์ผู้ใช้หรือไม่ หากเคยขอสรุปผล', topic: 'ความเข้าใจปัญหาและผู้ใช้', impact: 'ยังตรวจความเข้าใจปัญหาสำหรับ IDEA ได้จำกัด' }];
     const transport = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify({ ...raw, missingInformation: questions }) }] }] })));
     const config = { aiProvider: 'groq', aiKey: 'fixture-not-real', aiModel: 'fixture-model' } as Config;
     const response = await new GroqProvider(config, transport).analyze(run);
     expect(response.result.followUps).toEqual(questions);
-    expect(response.result.missingInformation).toEqual(['ขอหลักฐานความเข้าใจผู้ใช้']);
+    expect(response.result.missingInformation).toEqual(questions.map((item) => item.question));
     expect(transport).toHaveBeenCalledTimes(1);
   });
 });
