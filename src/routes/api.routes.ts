@@ -40,7 +40,7 @@ export function apiRoutes(config: Config) {
   api.put('/cases/:id', cases.update);
   api.post(
     '/cases/:id/analyses',
-    rateLimit('analysis', 10, 60 * 60 * 1000),
+    rateLimit('analysis', 20, 60 * 60 * 1000),
     cases.analyze,
   );
   api.post('/cases/:id/reviews', cases.review);
